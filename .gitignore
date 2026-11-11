@@ -1,0 +1,34 @@
+# Python Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environment Variables & Secrets (CRITICAL FOR SECURITY)
+.env
+.env.local
+*.pem
+*.key
+*.cert
+
+# Data & Model Binaries (Large files & Raw PII)
+data/raw/*.csv
+data/processed/*.parquet
+data/processed/*.gz
+data/processed/*.pt
+models_saved/*.pt
+models_saved/*.sha256
+
+# Logs & Audit Trails
+logs/*.jsonl
+logs/*.log
+
+# Virtual Environments
+venv/
+env/
+.venv/
+
+# OS specific
+.DS_Store
+Thumbs.db
+

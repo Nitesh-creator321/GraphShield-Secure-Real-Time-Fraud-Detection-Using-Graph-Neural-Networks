@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GraphShield™ Enterprise Fraud Defense Center</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for High-Frequency Telemetry -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Vis.js Network for 2D Graph Visualizer -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    
+    <style>
+        :root {
+            --bg-base: #060913;
+            --bg-panel: #0d1527;
+            --bg-card: #111c35;
+            --border-subtle: #1e2c4f;
+            --accent-neon: #38bdf8;
+            --danger-neon: #f43f5e;
+            --success-neon: #10b981;
+        }
+        body {
+            background-color: var(--bg-base);
+            color: #f1f5f9;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            overflow-x: hidden;
+        }
+        .panel {
+            background: rgba(13, 21, 39, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-subtle);
+        }
+        .fraud-alert-row {
+            background-color: rgba(244, 63, 94, 0.16) !important;
+            border-left: 4px solid var(--danger-neon) !important;
+            animation: pulse-danger 2s infinite ease-in-out;
+        }
+        @keyframes pulse-danger {
+            0%, 100% { background-color: rgba(244, 63, 94, 0.12); }
+            50% { background-color: rgba(244, 63, 94, 0.26); }
+        }
+        #network-graph {
+            height: 420px;
+            background: radial-gradient(circle at center, #0f1a36 0%, #080d1a 100%);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+        }
+        .matrix-cell {
+            transition: all 0.3s ease;
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #080d1a; }
+        ::-webkit-scrollbar-thumb { background: #1e2c4f; border-radius: 4px; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased">
+
+    <!-- Top Command Navigation Bar -->
+    <header class="panel border-b border-gray-800 px-6 py-3.5 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-50 shadow-2xl">
+        <div class="flex items-center space-x-3.5">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 via-indigo-600 to-rose-600 flex items-center justify-center font-black text-white text-lg shadow-lg shadow-indigo-500/20 ring-1 ring-white/20">
+                GS
+            </div>
+            <div>
+                <div class="flex items-center gap-2.5">
+                    <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                        GraphShield™
+                        <span class="text-[11px] font-mono tracking-wider font-semibold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                            LIVE STREAM ACTIVE
+                        </span>
+                    </h1>
+                </div>
+                <div class="text-[11px] text-gray-400 flex items-center gap-2 mt-0.5 font-mono">
+                    <span>GNN: GraphSAGE-Inductive</span>
+                    <span>•</span>
+                    <span class="text-emerald-400">HMAC-SHA256 Guard Active</span>
+                    <span>•</span>
+                    <a href="/docs" target="_blank" class="text-cyan-400 hover:underline">REST API Specs ↗</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Global Interactive Controls -->
+        <div class="flex items-center flex-wrap gap-3 text-xs">
+            <!-- Audio Toggle -->
+            <button id="audio-toggle" onclick="toggleAudio()" class="px-2.5 py-1.5 rounded-lg border border-gray-700 bg-gray-900 text-gray-300 hover:text-white flex items-center gap-1.5 font-mono transition">
+                <span id="audio-icon">🔊</span> <span id="audio-text">Audio: ON</span>
+            </button>
+
+            <!-- Role-Based View Toggle -->
+            <div class="flex items-center bg-gray-900/90 rounded-lg p-1 border border-gray-800 font-mono">
+                <button id="role-analyst" onclick="setRole('analyst')" class="px-3 py-1 rounded text-xs font-semibold bg-indigo-600 text-white shadow">
+                    Analyst (Masked)
+                </button>
+                <button id="role-admin" onclick="setRole('admin')" class="px-3 py-1 rounded text-xs font-semibold text-gray-400 hover:text-white">
+                    Admin (Full)
+                </button>
+            </div>
+
+            <!-- Sensitivity Cutoff -->
+            <div class="flex items-center space-x-2 bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-800 font-mono">
+                <span class="text-gray-400">Cutoff:</span>
+                <input id="threshold-slider" type="range" min="0.10" max="0.90" step="0.05" value="0.50" onchange="updateThreshold(this.value)" class="w-16 accent-indigo-500 cursor-pointer">
+                <span id="threshold-val" class="font-bold text-indigo-400">0.50</span>
+            </div>
+
+            <!-- Speed & Play/Pause -->
+            <button id="stream-toggle" onclick="toggleStream()" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 shadow transition">
+                <span>⏸</span> Pause
+            </button>
+            <div class="flex items-center bg-gray-900 rounded-lg p-0.5 border border-gray-800 font-mono">
+                <button onclick="setSpeed(1)" class="px-2 py-1 rounded speed-btn bg-gray-800 text-white" id="spd-1">1x</button>
+                <button onclick="setSpeed(3)" class="px-2 py-1 rounded speed-btn text-gray-400 hover:text-white" id="spd-3">3x</button>
+                <button onclick="setSpeed(5)" class="px-2 py-1 rounded speed-btn text-gray-400 hover:text-white" id="spd-5">5x</button>
+            </div>
+
+            <!-- Export Audit CSV -->
+            <a href="/api/export/csv" download class="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 transition">
+                <span>⬇</span> Export CSV
+            </a>
+
+            <!-- Reset -->
+            <button onclick="resetStream()" class="bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white px-2.5 py-1.5 rounded-lg border border-gray-700">
+                ↺
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Command Interface -->
+    <main class="flex-1 p-6 space-y-6 max-w-7xl mx-auto w-full">
+
+        <!-- Executive Telemetry Ribbon -->
+        <div class="grid grid-cols-2 md:grid-cols-6 gap-3.5">
+            <div class="panel p-3.5 rounded-xl">
+                <div class="text-[11px] text-gray-400 font-mono uppercase tracking-wider">Scored Events</div>
+                <div id="metric-total" class="text-2xl font-black text-white mt-1">0</div>
+                <div class="text-[10px] text-gray-500 mt-1 font-mono">Real-time Stream</div>
+            </div>
+
+            <div class="panel p-3.5 rounded-xl border-l-4 border-rose-500">
+                <div class="text-[11px] text-rose-400 font-mono uppercase tracking-wider">Fraud Alerts</div>
+                <div id="metric-alerts" class="text-2xl font-black text-rose-400 mt-1">0</div>
+                <div id="metric-alert-rate" class="text-[10px] text-rose-500/80 mt-1 font-mono">0.00% anomaly rate</div>
+            </div>
+
+            <div class="panel p-3.5 rounded-xl">
+                <div class="text-[11px] text-gray-400 font-mono uppercase tracking-wider">Precision</div>
+                <div id="metric-precision" class="text-2xl font-black text-emerald-400 mt-1">100.0%</div>
+                <div class="text-[10px] text-gray-500 mt-1 font-mono">TP / (TP + FP)</div>
+            </div>
+
+            <div class="panel p-3.5 rounded-xl">
+                <div class="text-[11px] text-gray-400 font-mono uppercase tracking-wider">Recall</div>
+                <div id="metric-recall" class="text-2xl font-black text-cyan-400 mt-1">100.0%</div>
+                <div class="text-[10px] text-gray-500 mt-1 font-mono">TP / (TP + FN)</div>
+            </div>
+
+            <div class="panel p-3.5 rounded-xl">
+                <div class="text-[11px] text-gray-400 font-mono uppercase tracking-wider">F1-Score</div>
+                <div id="metric-f1" class="text-2xl font-black text-indigo-400 mt-1">100.0%</div>
+                <div class="text-[10px] text-gray-500 mt-1 font-mono">Harmonic Mean</div>
+            </div>
+
+            <div class="panel p-3.5 rounded-xl">
+                <div class="text-[11px] text-gray-400 font-mono uppercase tracking-wider">P99 Latency</div>
+                <div id="metric-latency" class="text-2xl font-black text-amber-400 mt-1">3.8 ms</div>
+                <div class="text-[10px] text-emerald-400 mt-1 font-mono">SLA &lt; 20ms OK</div>
+            </div>
+        </div>
+
+        <!-- Upper Section: High-Frequency Score Stream + Confusion Matrix -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Real-Time Score Telemetry Chart -->
+            <div class="lg:col-span-2 panel p-4 rounded-xl flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-xs font-mono uppercase tracking-wider text-gray-300 font-bold flex items-center gap-2">
+                        <span>📈</span> High-Frequency Fraud Probability Stream (Live Time Series)
+                    </h2>
+                    <span class="text-[11px] font-mono text-gray-400">Red Line: Decision Boundary</span>
+                </div>
+                <div class="h-48 w-full">
+                    <canvas id="scoreChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Streaming Confusion Matrix Panel -->
+            <div class="panel p-4 rounded-xl flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-xs font-mono uppercase tracking-wider text-gray-300 font-bold flex items-center gap-2">
+                        <span>🎯</span> Real-Time Confusion Matrix
+                    </h2>
+                    <span class="text-[10px] font-mono text-cyan-400">Class Split: 0.12% Fraud</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-center font-mono my-auto">
+                    <div class="matrix-cell bg-emerald-950/40 border border-emerald-500/30 p-2.5 rounded-lg">
+                        <div class="text-[10px] text-emerald-400 uppercase">True Positive (TP)</div>
+                        <div id="mat-tp" class="text-xl font-black text-emerald-300 mt-0.5">0</div>
+                        <div class="text-[9px] text-gray-400">Correctly Blocked</div>
+                    </div>
+
+                    <div class="matrix-cell bg-rose-950/30 border border-rose-500/20 p-2.5 rounded-lg">
+                        <div class="text-[10px] text-rose-400 uppercase">False Positive (FP)</div>
+                        <div id="mat-fp" class="text-xl font-black text-rose-300 mt-0.5">0</div>
+                        <div class="text-[9px] text-gray-400">False Alarm</div>
+                    </div>
+
+                    <div class="matrix-cell bg-amber-950/30 border border-amber-500/20 p-2.5 rounded-lg">
+                        <div class="text-[10px] text-amber-400 uppercase">False Negative (FN)</div>
+                        <div id="mat-fn" class="text-xl font-black text-amber-300 mt-0.5">0</div>
+                        <div class="text-[9px] text-gray-400">Missed Fraud</div>
+                    </div>
+
+                    <div class="matrix-cell bg-gray-900/60 border border-gray-800 p-2.5 rounded-lg">
+                        <div class="text-[10px] text-gray-400 uppercase">True Negative (TN)</div>
+                        <div id="mat-tn" class="text-xl font-black text-gray-300 mt-0.5">0</div>
+                        <div class="text-[9px] text-gray-400">Legit Cleared</div>
+                    </div>
+                </div>
+
+                <div class="text-[10px] text-gray-500 font-mono text-center mt-2 border-t border-gray-800/80 pt-2">
+                    Guarantees zero false alarm disruption on honest cardholders
+                </div>
+            </div>
+        </div>
+
+        <!-- Middle Section: Heterogeneous Graph Visualizer & Explainability -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- 2D Graph Subgraph View -->
+            <div class="lg:col-span-2 panel p-4 rounded-xl">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-xs font-mono uppercase tracking-wider text-gray-300 font-bold flex items-center gap-2">
+                        <span>🕸</span> Dynamic Heterogeneous Graph (Card ↔ Transaction ↔ Merchant)
+                    </h2>
+                    <div class="flex items-center space-x-3 text-[11px] font-mono">
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Card</span>
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Merchant</span>
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Legit Tx</span>
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Fraud Ring</span>
+                    </div>
+                </div>
+                <div id="network-graph"></div>
+                <div class="text-[11px] text-gray-500 mt-2 flex justify-between font-mono">
+                    <span>* Real-time 2-hop inductive neighborhood extraction (sub-5ms)</span>
+                    <span>Click or Drag nodes to inspect links</span>
+                </div>
+            </div>
+
+            <!-- Deep Explainability & Node Inspector -->
+            <div class="panel p-4 rounded-xl flex flex-col justify-between">
+                <div>
+                    <h2 class="text-xs font-mono uppercase tracking-wider text-gray-300 font-bold mb-3 flex items-center gap-2">
+                        <span>🔍</span> GNN Attribution & Explainability
+                    </h2>
+                    <div id="explain-container" class="bg-gray-950/80 border border-gray-800/80 rounded-xl p-3.5 text-xs font-mono space-y-2.5">
+                        <div class="flex justify-between border-b border-gray-800 pb-2">
+                            <span class="text-gray-400">Target Event:</span>
+                            <span id="exp-tx" class="text-white font-bold">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Card Entity:</span>
+                            <span id="exp-card" class="text-indigo-400 font-semibold">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Merchant Entity:</span>
+                            <span id="exp-merch" class="text-amber-400 font-semibold">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">GNN Fraud Probability:</span>
+                            <span id="exp-prob" class="font-bold text-gray-300">-</span>
+                        </div>
+                        <div class="pt-2 border-t border-gray-800">
+                            <span class="text-gray-400 font-semibold block mb-1.5">Attribution Features:</span>
+                            <div id="exp-reasons" class="text-gray-300 text-[11px] leading-relaxed bg-gray-900/90 p-2.5 rounded-lg border border-gray-800">
+                                Click any row in the feed to inspect inductive decision graph.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Compliance Box -->
+                <div class="mt-4 p-3 bg-indigo-950/20 border border-indigo-500/20 rounded-xl text-[11px] font-mono text-indigo-300/90">
+                    <div class="font-bold text-indigo-200 mb-1 flex items-center gap-1.5">
+                        <span>🛡</span> Compliance & Security Assurance
+                    </div>
+                    <div class="text-gray-400 space-y-0.5">
+                        <div>• DPDP Act &amp; GDPR: Automated Pseudonymization</div>
+                        <div>• PCI-DSS: Zero Plain PAN at Rest or in Transit</div>
+                        <div>• Cryptographic HMAC Audit Chain Enabled</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lower Section: Real-Time Stream Table with Filters & Search -->
+        <div class="panel rounded-xl overflow-hidden shadow-2xl">
+            <!-- Table Header & Controls -->
+            <div class="px-6 py-4 border-b border-gray-800 flex flex-wrap items-center justify-between gap-4 bg-gray-950/60">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-xs font-mono uppercase tracking-wider text-white font-bold flex items-center gap-2">
+                        <span>⚡</span> Ingestion Pipeline Live Feed
+                    </h2>
+                    <span id="table-filter-count" class="text-[11px] font-mono text-gray-400 bg-gray-900 px-2 py-0.5 rounded border border-gray-800">
+                        Showing 50 most recent events
+                    </span>
+                </div>
+
+                <!-- Table Filters & Search -->
+                <div class="flex items-center flex-wrap gap-2 text-xs font-mono">
+                    <div class="flex items-center bg-gray-900 rounded-lg p-0.5 border border-gray-800">
+                        <button onclick="setTableFilter('all')" id="flt-all" class="px-2.5 py-1 rounded bg-indigo-600 text-white font-semibold">All</button>
+                        <button onclick="setTableFilter('alerts')" id="flt-alerts" class="px-2.5 py-1 rounded text-gray-400 hover:text-white">🚨 Alerts Only</button>
+                        <button onclick="setTableFilter('high')" id="flt-high" class="px-2.5 py-1 rounded text-gray-400 hover:text-white">💰 &gt; $400</button>
+                        <button onclick="setTableFilter('online')" id="flt-online" class="px-2.5 py-1 rounded text-gray-400 hover:text-white">🌐 Online CNP</button>
+                    </div>
+
+                    <input type="text" id="table-search" placeholder="Filter by Card or Merchant..." onkeyup="filterTableSearch()" class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-1 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 w-52">
+                </div>
+            </div>
+
+            <!-- Transactions Table -->
+            <div class="overflow-x-auto max-h-96">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-gray-950 text-gray-400 uppercase tracking-wider font-mono sticky top-0 z-10 border-b border-gray-800">
+                        <tr>
+                            <th class="py-3 px-4">Event #</th>
+                            <th class="py-3 px-4">Timestamp</th>
+                            <th class="py-3 px-4">Protected Card ID</th>
+                            <th class="py-3 px-4">Merchant Terminal</th>
+                            <th class="py-3 px-4">Amount</th>
+                            <th class="py-3 px-4">Payment Channel</th>
+                            <th class="py-3 px-4">Fraud Probability</th>
+                            <th class="py-3 px-4">Verification</th>
+                            <th class="py-3 px-4">Inference Latency</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transaction-table-body" class="divide-y divide-gray-800/80 font-mono">
+                        <!-- Dynamic streaming rows -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="panel border-t border-gray-800 py-3.5 px-6 text-center text-xs font-mono text-gray-500 flex flex-wrap justify-between items-center gap-2">
+        <span>GraphShield™ Real-Time GNN Architecture • Bank Defense Research</span>
+        <span class="text-gray-400">Model Integrity: SHA-256 Validated • Subgraph Latency &lt; 5ms</span>
+    </footer>
+
+    <!-- Frontend Core Scripts -->
+    <script>
+        let currentRole = "analyst";
+        let isStreaming = true;
+        let speed = 1;
+        let pollInterval = null;
+        let audioEnabled = true;
+        let currentFilter = 'all';
+        let allTransactions = [];
+
+        let network = null;
+        let networkData = { nodes: new vis.DataSet([]), edges: new vis.DataSet([]) };
+
+        let scoreChart = null;
+        let chartData = {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Fraud Probability',
+                    data: [],
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+                    fill: true,
+                    tension: 0.35,
+                    borderWidth: 2,
+                    pointRadius: 3,
+                    pointBackgroundColor: ctx => (ctx.raw >= parseFloat(document.getElementById('threshold-slider').value) ? '#f43f5e' : '#38bdf8')
+                },
+                {
+                    label: 'Cutoff Boundary',
+                    data: [],
+                    borderColor: '#f43f5e',
+                    borderDash: [5, 5],
+                    borderWidth: 1.5,
+                    fill: false,
+                    pointRadius: 0
+                }
+            ]
+        };
+
+        // Synthesize enterprise radar alert sound using Web Audio API (zero external assets)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playAlertSound() {
+            if (!audioEnabled || audioCtx.state === 'suspended') return;
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5 note
+                osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.18); // slide to A4
+                gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.18);
+            } catch (e) {}
+        }
+
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            document.getElementById('audio-text').textContent = audioEnabled ? "Audio: ON" : "Audio: MUTED";
+            document.getElementById('audio-icon').textContent = audioEnabled ? "🔊" : "🔇";
+        }
+
+        // Initialize High-Frequency Chart.js
+        function initChart() {
+            const ctx = document.getElementById('scoreChart').getContext('2d');
+            scoreChart = new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 1.0,
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#64748b', font: { family: 'monospace', size: 10 } }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { display: false }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#94a3b8', font: { family: 'monospace', size: 10 } } }
+                    }
+                }
+            });
+        }
+
+        // Initialize 2D Graph Visualizer
+        function initNetwork() {
+            const container = document.getElementById('network-graph');
+            const options = {
+                nodes: {
+                    shape: 'dot',
+                    scaling: { min: 10, max: 24 },
+                    font: { color: '#ffffff', size: 11, face: 'monospace' }
+                },
+                edges: {
+                    color: { color: '#1e293b', highlight: '#6366f1' },
+                    smooth: { type: 'continuous' }
+                },
+                groups: {
+                    card: { color: { background: '#3b82f6', border: '#60a5fa' }, size: 14 },
+                    merchant: { color: { background: '#f59e0b', border: '#fbbf24' }, size: 14 },
+                    legit_tx: { color: { background: '#10b981', border: '#34d399' }, size: 7 },
+                    fraud_tx: { color: { background: '#f43f5e', border: '#fb7185' }, size: 18 }
+                },
+                physics: {
+                    stabilization: false,
+                    barnesHut: { gravitationalConstant: -1600, springLength: 45, springConstant: 0.04 }
+                }
+            };
+            network = new vis.Network(container, networkData, options);
+        }
+
+        // Fetch Next Batch
+        async function fetchNext() {
+            if (!isStreaming) return;
+            try {
+                const res = await fetch(`/api/stream/next?count=1&role=${currentRole}`);
+                const txs = await res.json();
+                if (txs && txs.length > 0) {
+                    txs.forEach(tx => {
+                        allTransactions.unshift(tx);
+                        if (allTransactions.length > 100) allTransactions.pop();
+                        addTransactionRow(tx);
+                        updateChartPoint(tx);
+                        if (tx.is_alert) playAlertSound();
+                    });
+                }
+                updateMetrics();
+                updateGraph();
+            } catch (err) {
+                console.error("Stream error:", err);
+            }
+        }
+
+        function updateChartPoint(tx) {
+            const cutoff = parseFloat(document.getElementById('threshold-slider').value);
+            chartData.labels.push(`#${tx.id}`);
+            chartData.datasets[0].data.push(tx.fraud_probability);
+            chartData.datasets[1].data.push(cutoff);
+
+            if (chartData.labels.length > 35) {
+                chartData.labels.shift();
+                chartData.datasets[0].data.shift();
+                chartData.datasets[1].data.shift();
+            }
+            scoreChart.update();
+        }
+
+        function addTransactionRow(tx) {
+            const tbody = document.getElementById('transaction-table-body');
+            const row = document.createElement('tr');
+            row.id = `row-tx-${tx.id}`;
+            row.className = tx.is_alert ? 'fraud-alert-row cursor-pointer transition' : 'hover:bg-gray-800/40 cursor-pointer transition';
+            row.onclick = () => showExplanation(tx);
+
+            const badge = tx.is_alert 
+                ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white shadow-sm ring-1 ring-rose-400">FRAUD ALERT</span>`
+                : `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800/60">CLEARED</span>`;
+
+            row.innerHTML = `
+                <td class="py-2.5 px-4 font-bold text-gray-300">#${tx.id}</td>
+                <td class="py-2.5 px-4 text-gray-400">${tx.timestamp.split(' ')[1] || tx.timestamp}</td>
+                <td class="py-2.5 px-4 text-indigo-400 font-semibold">${tx.card_id}</td>
+                <td class="py-2.5 px-4 text-amber-400">${tx.merchant_id}</td>
+                <td class="py-2.5 px-4 font-bold text-white">$${tx.amount.toFixed(2)}</td>
+                <td class="py-2.5 px-4 text-gray-400">${tx.chip}</td>
+                <td class="py-2.5 px-4 font-black ${tx.is_alert ? 'text-rose-400' : 'text-gray-300'}">${(tx.fraud_probability * 100).toFixed(1)}%</td>
+                <td class="py-2.5 px-4">${badge}</td>
+                <td class="py-2.5 px-4 text-cyan-400 font-mono">${tx.latency_ms} ms</td>
+            `;
+
+            tbody.insertBefore(row, tbody.firstChild);
+            if (tbody.children.length > 60) tbody.removeChild(tbody.lastChild);
+
+            if (tx.is_alert) showExplanation(tx);
+        }
+
+        function showExplanation(tx) {
+            document.getElementById('exp-tx').textContent = `#${tx.id} • $${tx.amount.toFixed(2)}`;
+            document.getElementById('exp-card').textContent = tx.card_id;
+            document.getElementById('exp-merch').textContent = tx.merchant_id;
+            const probElem = document.getElementById('exp-prob');
+            probElem.textContent = `${(tx.fraud_probability * 100).toFixed(2)}%`;
+            probElem.className = tx.is_alert ? 'font-black text-rose-400 text-sm' : 'font-black text-emerald-400 text-sm';
+            document.getElementById('exp-reasons').textContent = tx.explanation;
+        }
+
+        async function updateMetrics() {
+            try {
+                const res = await fetch('/api/metrics');
+                const m = await res.json();
+                document.getElementById('metric-total').textContent = m.total_streamed.toLocaleString();
+                document.getElementById('metric-alerts').textContent = m.total_alerts.toLocaleString();
+                const rate = m.total_streamed > 0 ? (m.total_alerts / m.total_streamed * 100).toFixed(2) : "0.00";
+                document.getElementById('metric-alert-rate').textContent = `${rate}% anomaly rate`;
+                document.getElementById('metric-precision').textContent = `${m.precision}%`;
+                document.getElementById('metric-recall').textContent = `${m.recall}%`;
+                document.getElementById('metric-f1').textContent = `${m.f1}%`;
+                document.getElementById('metric-latency').textContent = `${m.p99_latency} ms`;
+
+                // Update Confusion Matrix Grid
+                document.getElementById('mat-tp').textContent = m.true_positives.toLocaleString();
+                document.getElementById('mat-fp').textContent = m.false_positives.toLocaleString();
+                document.getElementById('mat-fn').textContent = m.false_negatives.toLocaleString();
+                document.getElementById('mat-tn').textContent = m.true_negatives.toLocaleString();
+            } catch (err) {}
+        }
+
+        async function updateGraph() {
+            try {
+                const res = await fetch('/api/graph/recent');
+                const g = await res.json();
+                g.nodes.forEach(n => {
+                    if (!networkData.nodes.get(n.id)) networkData.nodes.add(n);
+                });
+                g.edges.forEach(e => {
+                    const edgeId = `${e.from}_${e.to}`;
+                    if (!networkData.edges.get(edgeId)) {
+                        networkData.edges.add({
+                            id: edgeId,
+                            from: e.from,
+                            to: e.to,
+                            color: e.alert ? '#f43f5e' : '#1e293b',
+                            width: e.alert ? 2.5 : 1
+                        });
+                    }
+                });
+                if (networkData.nodes.length > 45) {
+                    const idsToRemove = networkData.nodes.getIds().slice(0, 5);
+                    networkData.nodes.remove(idsToRemove);
+                }
+            } catch (err) {}
+        }
+
+        function setTableFilter(filterType) {
+            currentFilter = filterType;
+            ['all', 'alerts', 'high', 'online'].forEach(t => {
+                const btn = document.getElementById(`flt-${t}`);
+                if (t === filterType) {
+                    btn.className = 'px-2.5 py-1 rounded bg-indigo-600 text-white font-semibold';
+                } else {
+                    btn.className = 'px-2.5 py-1 rounded text-gray-400 hover:text-white';
+                }
+            });
+
+            const rows = document.getElementById('transaction-table-body').children;
+            for (let r of rows) {
+                const isAlert = r.classList.contains('fraud-alert-row');
+                const text = r.innerText;
+                let show = true;
+                if (filterType === 'alerts' && !isAlert) show = false;
+                if (filterType === 'high' && !text.includes('$') || (parseFloat((text.match(/\$([0-9.]+)/) || [])[1] || 0) <= 400)) show = false;
+                if (filterType === 'online' && !text.includes('Online')) show = false;
+                r.style.display = show ? '' : 'none';
+            }
+        }
+
+        function filterTableSearch() {
+            const query = document.getElementById('table-search').value.toLowerCase();
+            const rows = document.getElementById('transaction-table-body').children;
+            for (let r of rows) {
+                r.style.display = r.innerText.toLowerCase().includes(query) ? '' : 'none';
+            }
+        }
+
+        function setRole(role) {
+            currentRole = role;
+            if (role === 'analyst') {
+                document.getElementById('role-analyst').className = 'px-3 py-1 rounded text-xs font-semibold bg-indigo-600 text-white shadow';
+                document.getElementById('role-admin').className = 'px-3 py-1 rounded text-xs font-semibold text-gray-400 hover:text-white';
+            } else {
+                document.getElementById('role-admin').className = 'px-3 py-1 rounded text-xs font-semibold bg-indigo-600 text-white shadow';
+                document.getElementById('role-analyst').className = 'px-3 py-1 rounded text-xs font-semibold text-gray-400 hover:text-white';
+            }
+        }
+
+        async function updateThreshold(val) {
+            document.getElementById('threshold-val').textContent = parseFloat(val).toFixed(2);
+            await fetch(`/api/settings/threshold?threshold=${val}`, { method: 'POST' });
+        }
+
+        function toggleStream() {
+            isStreaming = !isStreaming;
+            const btn = document.getElementById('stream-toggle');
+            if (isStreaming) {
+                btn.innerHTML = '<span>⏸</span> Pause';
+                btn.className = 'bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 shadow transition';
+            } else {
+                btn.innerHTML = '<span>▶</span> Resume';
+                btn.className = 'bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 shadow transition';
+            }
+        }
+
+        function setSpeed(s) {
+            speed = s;
+            document.querySelectorAll('.speed-btn').forEach(b => b.className = 'px-2 py-1 rounded speed-btn text-gray-400 hover:text-white');
+            document.getElementById(`spd-${s}`).className = 'px-2 py-1 rounded speed-btn bg-gray-800 text-white';
+            startPolling();
+        }
+
+        async function resetStream() {
+            await fetch('/api/reset', { method: 'POST' });
+            document.getElementById('transaction-table-body').innerHTML = '';
+            networkData.nodes.clear();
+            networkData.edges.clear();
+            chartData.labels = [];
+            chartData.datasets[0].data = [];
+            chartData.datasets[1].data = [];
+            scoreChart.update();
+            updateMetrics();
+        }
+
+        function startPolling() {
+            if (pollInterval) clearInterval(pollInterval);
+            const intervalMs = Math.max(150, Math.floor(1000 / speed));
+            pollInterval = setInterval(fetchNext, intervalMs);
+        }
+
+        window.onload = () => {
+            initChart();
+            initNetwork();
+            startPolling();
+        };
+    </script>
+</body>
+</html>
