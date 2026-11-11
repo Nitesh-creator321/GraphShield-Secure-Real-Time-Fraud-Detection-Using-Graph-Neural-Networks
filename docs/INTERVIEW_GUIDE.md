@@ -46,3 +46,4 @@ This guide is designed for preparing machine learning and security engineering i
 > - **Data Privacy (PCI-DSS & GDPR):** Raw Primary Account Numbers (PANs) and User IDs are pseudonymized with salted HMAC-SHA256 before graph construction. This prevents precomputed Rainbow Table attacks if graph storage is ever breached.
 > - **Tamper-Evident Audit Trails:** Predictions and alert configurations are logged to an append-only JSONL file where each entry contains an HMAC-SHA256 signature chained to the previous entry's hash. Any tampering or deletion breaks the cryptographic chain.
 > - **Model Integrity:** We store a SHA-256 checksum of the trained `.pt` weights and verify it before memory loading, preventing unauthorized model tampering or backdoor injection."
+
