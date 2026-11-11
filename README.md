@@ -19,8 +19,8 @@
 6. [Executive Command Center (Web UI)](#6-executive-command-center-web-ui)
 7. [Comprehensive Security Architecture](#7-comprehensive-security-architecture)
 8. [Quick Start & Command Reference](#8-quick-start--command-reference)
-9. [How to Explain This Project in an Interview](#9-how-to-explain-this-project-in-an-interview)
-10. [Limitations & Research Disclosures](#10-limitations--research-disclosures)
+9. [Research Disclosures & Limitations](#9-research-disclosures--limitations)
+10. [License](#10-license)
 
 ---
 
@@ -29,7 +29,7 @@
 ### The Baseline: Static Historical Analysis
 This project originated from research exploring credit card fraud detection using static graph datasets (e.g., [`bimbomuri/Fraud_Detection_GNN`](https://github.com/bimbomuri/Fraud_Detection_GNN) and `Fraud_Detection.ipynb`).
 
-While initial implementations demonstrated that graph neural networks (GNNs) could capture complex structural relationships, **traditional approaches suffered from four major production limitations**:
+While initial implementations demonstrated that graph neural networks (GNNs) could capture complex structural relationships, traditional approaches suffered from four major production limitations:
 1. **Offline Batch Bias:** Models were trained and evaluated on static, monolithic graphs. In real banking, transactions arrive one by one over high-frequency payment gateways.
 2. **Transductive Bottlenecks:** Traditional GCN/GAT models required the entire graph to be present during training. Adding an unseen card or merchant required re-training or expensive full-graph re-indexing.
 3. **Quadratic Scaling Failure:** Connecting cards directly to cards or merchants to merchants created $O(d^2)$ edge explosions for high-volume stores (e.g., Amazon, Walmart).
@@ -257,34 +257,7 @@ Get-Content logs/security_audit.jsonl
 
 ---
 
-## 9. How to Explain This Project in an Interview
-
-When discussing GraphShield in an engineering or machine learning interview, structure your answer around the **STAR method**:
-
-### The 60-Second Elevator Pitch
-> *"I built GraphShield, a secure real-time fraud detection platform using Inductive Graph Neural Networks (GraphSAGE). In traditional systems, models evaluate transactions as isolated rows, missing collusive fraud rings where multiple stolen cards hit the same merchants. 
-> 
-> I designed a heterogeneous graph linking cards, merchants, and transactions, and solved the streaming latency challenge by implementing bounded 2-hop neighborhood sampling that scores events in under 5 milliseconds without rebuilding the graph. 
-> 
-> Because financial ML requires strict compliance, I integrated salted HMAC tokenization, role-based masking, and a tamper-evident audit logging chain that maps to PCI-DSS and GDPR requirements."*
-
-### Key Technical Questions You Can Answer Confidently
-
-1. **Why GNN instead of XGBoost?**
-   * *Answer:* "XGBoost evaluates feature vectors in isolation. A GNN propagates behavioral embeddings across the card-merchant bipartite graph. If a merchant was recently connected to two confirmed fraud transactions, the GNN's neighborhood aggregation naturally passes that risk signal into the next transaction hitting that merchant."
-
-2. **How does GraphSAGE handle unseen cards in real-time?**
-   * *Answer:* "Transductive GNNs like GCN require matrix inversions over the entire adjacency graph. GraphSAGE learns aggregator functions (shared linear projections and pooling layers) rather than fixed node embeddings. When an unseen card makes its first purchase, GraphSAGE aggregates the merchant's known historical neighbors and the new transaction's features inductively."
-
-3. **How did you handle the 0.12% class imbalance?**
-   * *Answer:* "With 99.88% legitimate transactions, standard Cross-Entropy produces models that collapse to zero fraud predictions. We implement Class-Weighted Cross-Entropy (weighting the fraud loss by $\sim 820\times$) and Focal Loss ($\gamma = 2.0$), optimizing for Precision-Recall AUC rather than ROC-AUC or accuracy."
-
-4. **How is the system secured?**
-   * *Answer:* "We treat ML security with the same rigor as backend infrastructure. Card PANs are pseudonymized via salted HMAC-SHA256 before graph construction so rainbow tables cannot reverse them. Model weights are checked against a pinned SHA-256 hash before loading into memory to prevent tampering. Every alert is written to an immutable log with a cryptographic HMAC signature chain."
-
----
-
-## 10. Limitations & Research Disclosures
+## 9. Research Disclosures & Limitations
 
 GraphShield is designed as an educational and research proof-of-concept demonstrating real-time inductive GNN architectures and ML cybersecurity principles.
 
@@ -293,8 +266,6 @@ GraphShield is designed as an educational and research proof-of-concept demonstr
 
 ---
 
-## License & Authorship
-- **Author:** Senior ML & Cybersecurity Engineering Team
-- **Project:** GraphShield™ Research Initiative
-- **License:** MIT License
+## 10. License
 
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
